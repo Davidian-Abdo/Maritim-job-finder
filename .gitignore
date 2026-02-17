@@ -1,0 +1,59 @@
+############################
+# ENV / SECRETS (IMPORTANT)
+############################
+backend/.env
+.env
+.env.*
+
+############################
+# PYTHON / FASTAPI
+############################
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+venv/
+backend/jobsc_venv/
+backend/.env
+.env
+.pytest_cache/
+.mypy_cache/
+
+############################
+# ALEMBIC
+############################
+alembic/versions/*.pyc
+
+############################
+# FLUTTER / DART
+############################
+mobile_app/.dart_tool/
+mobile_app/.packages
+mobile_app/.pub-cache/
+mobile_app/build/
+mobile_app/.flutter-plugins
+mobile_app/.flutter-plugins-dependencies
+
+############################
+# IDE / EDITORS
+############################
+.vscode/
+.idea/
+*.iml
+
+############################
+# OS FILES
+############################
+.DS_Store
+Thumbs.db
+
+############################
+# LOGS
+############################
+*.log
+
+############################
+# additional stuff
+############################
+Copy_files.py
+assembled_code1.txt

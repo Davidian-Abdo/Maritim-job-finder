@@ -60,4 +60,4 @@ async def get_current_user(
     if user is None:
         logger.warning(f"User id {user_id} not found")
         raise credentials_exception
-    return user
+    return user 

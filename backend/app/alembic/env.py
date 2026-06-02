@@ -6,11 +6,11 @@ import sys
 sys.path.append(".")
 from app.db import Base
 from app.settings import settings
-
+from app.models import  User, Job, UserKeyword, SavedJob, UserJob, ScrapeSchedule
 config = context.config
 fileConfig(config.config_file_name)
 target_metadata = Base.metadata
-
+ 
 
 def run_migrations_offline():
     """Run migrations in offline mode."""

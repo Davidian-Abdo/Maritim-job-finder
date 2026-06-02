@@ -2,11 +2,17 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter/foundation.dart'; // Add this for kIsWeb
+import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
 
 class ApiClient extends ChangeNotifier {
   // Use localhost for Web/Desktop and 10.0.2.2 for Android Emulator
   static String get _baseUrl {
     if (kIsWeb) {
+      if (kDebugMode) {
+      // When running locally in debug mode, use your local backend
+      return 'http://localhost:8000';
+      }
+
       return const String.fromEnvironment(
         'API_URL',
         defaultValue: 'https://maritimjobsapi.duckdns.org',
@@ -106,6 +112,54 @@ class ApiClient extends ChangeNotifier {
       throw Exception('Register failed: ${res.body}');
     }
   }
+  
+  // ================= SCRAPING =================
+
+  Future<void> triggerScrape() async {
+    final res = await http.post(
+      Uri.parse('$_baseUrl/scrape/trigger'),
+      headers: _headers(),
+    );
+    if (res.statusCode != 202) {
+      throw Exception('Failed to trigger scrape: ${res.body}');
+    }
+  }
+
+  Future<Map<String, dynamic>> getScrapeStatus() async {
+    final res = await http.get(
+      Uri.parse('$_baseUrl/scrape/status'),
+      headers: _headers(),
+    );
+    if (res.statusCode != 200) {
+      throw Exception('Failed to get scrape status: ${res.body}');
+    }
+    return jsonDecode(res.body);
+  }
+
+  Future<void> setSchedule(bool isActive, String? cron) async {
+    final res = await http.put(
+      Uri.parse('$_baseUrl/scrape/schedule'),
+      headers: _headers(),
+      body: jsonEncode({
+        'is_active': isActive,
+        'cron_expression': cron,
+      }),
+    );
+    if (res.statusCode != 200) {
+      throw Exception('Failed to set schedule: ${res.body}');
+    }
+  }
+
+  Future<Map<String, dynamic>> getSchedule() async {
+    final res = await http.get(
+      Uri.parse('$_baseUrl/scrape/schedule'),
+      headers: _headers(),
+    );
+    if (res.statusCode != 200) {
+      throw Exception('Failed to get schedule: ${res.body}');
+    }
+    return jsonDecode(res.body);
+  }
 
   // ================= JOBS =================
 
@@ -113,6 +167,8 @@ class ApiClient extends ChangeNotifier {
     String? rank,
     String? location,
     String? vesselType,
+    String? title,
+    String? company,
     int limit = 20,
     int offset = 0,
   }) async {
@@ -121,6 +177,8 @@ class ApiClient extends ChangeNotifier {
         if (rank != null) 'rank': rank,
         if (location != null) 'location': location,
         if (vesselType != null) 'vessel_type': vesselType,
+        if (title != null) 'title': title,
+        if (company != null) 'company': company,
         'limit': limit.toString(),
         'offset': offset.toString(),
       },
@@ -183,6 +241,55 @@ class ApiClient extends ChangeNotifier {
       throw Exception(res.body);
     }
   }
+
+  // ================= PROFILE =================
+  Future<Map<String, dynamic>> getProfile() async {
+    final res = await http.get(Uri.parse('$_baseUrl/profile/'), headers: _headers());
+    if (res.statusCode != 200) throw Exception('Failed to get profile: ${res.body}');
+    return jsonDecode(res.body);
+  }
+
+  Future<void> updateProfile({List<String>? selectedSources}) async {
+    final body = <String, dynamic>{};
+    if (selectedSources != null) body['selected_sources'] = selectedSources;
+    final res = await http.put(
+      Uri.parse('$_baseUrl/profile/'),
+      headers: _headers(),
+      body: jsonEncode(body),
+    );
+    if (res.statusCode != 200) throw Exception('Failed to update profile: ${res.body}');
+  }
+
+  Future<List<String>> getKeywords() async {
+    final res = await http.get(Uri.parse('$_baseUrl/profile/keywords'), headers: _headers());
+    if (res.statusCode != 200) throw Exception('Failed to get keywords: ${res.body}');
+    final List list = jsonDecode(res.body);
+    return list.cast<String>();
+  }
+
+  Future<void> addKeyword(String keyword) async {
+    final res = await http.post(
+      Uri.parse('$_baseUrl/profile/keywords'),
+      headers: _headers(),
+      body: jsonEncode({'keyword': keyword}),
+    );
+    if (res.statusCode != 201) throw Exception('Failed to add keyword: ${res.body}');
+  }
+
+  Future<void> deleteKeyword(String keyword) async {
+    final res = await http.delete(
+      Uri.parse('$_baseUrl/profile/keywords/$keyword'),
+      headers: _headers(),
+    );
+    if (res.statusCode != 200) throw Exception('Failed to delete keyword: ${res.body}');
+  }
+
+  Future<Map<String, dynamic>> getAvailableSources() async {
+    final res = await http.get(Uri.parse('$_baseUrl/profile/sources'), headers: _headers());
+    if (res.statusCode != 200) throw Exception('Failed to get sources: ${res.body}');
+    return jsonDecode(res.body);
+  }
+
 }
 
 // ================= JOB MODEL =================
@@ -194,6 +301,9 @@ class Job {
   final String? location;
   final String description;
   final String url;
+  final bool isNew;                 // added
+  final String? applicationType;    // added
+  final String? contactEmail;       // added
 
   Job({
     required this.id,
@@ -202,6 +312,9 @@ class Job {
     this.location,
     required this.description,
     required this.url,
+    required this.isNew,
+    this.applicationType,
+    this.contactEmail,
   });
 
   factory Job.fromJson(Map<String, dynamic> json) {
@@ -212,7 +325,9 @@ class Job {
       location: json['location'],
       description: json['description'],
       url: json['url'],
+      isNew: json['is_new'] ?? false,
+      applicationType: json['application_type'],
+      contactEmail: json['contact_email'],
     );
   }
 }
-

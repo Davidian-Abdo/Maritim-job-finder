@@ -20,4 +20,11 @@ httpx>=0.27.0
 beautifulsoup4>=4.12.3
 apscheduler>=3.10.4
 
+supabase>=1.2.0          # Supabase Storage client
+aiofiles>=23.2.0         # optional, for local temp files
+python-multipart>=0.0.12 # already present, used for file uploads
+
+playwright
+python-jobspy
+
 logger

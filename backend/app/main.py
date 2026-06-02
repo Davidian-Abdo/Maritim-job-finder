@@ -1,3 +1,11 @@
+import sys
+import asyncio
+
+if sys.platform.startswith("win"):
+    asyncio.set_event_loop_policy(
+        asyncio.WindowsSelectorEventLoopPolicy()
+    )
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -8,7 +16,7 @@ from app.db import engine
 from app.settings import settings
 from app.routes import auth, jobs
 from app.middleware import add_exception_handlers
-
+from app.routes import auth, jobs, profile , scrape
 # Configure logging
 logging.basicConfig(  
     level=logging.INFO,
@@ -40,10 +48,8 @@ app = FastAPI(
 # CORS (Production Ready)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://maritimjobs.duckdns.org",
-        "https://www.maritimjobs.duckdns.org",
-    ],
+    allow_origins=settings.ALLOWED_ORIGINS,
+        
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type"],
@@ -55,7 +61,8 @@ add_exception_handlers(app)
 # Routers
 app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
 app.include_router(jobs.router, prefix="/jobs", tags=["Jobs"])
-
+app.include_router(scrape.router)  
+app.include_router(profile.router, prefix="/profile", tags=["Profile"])   # new
 # Health check
 @app.get("/health")
 async def health_check():

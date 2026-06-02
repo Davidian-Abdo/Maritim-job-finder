@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:pull_to_refresh/pull_to_refresh.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../api_client.dart';
+import 'dart:async'; // for Timer (debounce)
 
 class JobsScreen extends StatefulWidget {
   const JobsScreen({super.key});
@@ -17,16 +18,24 @@ class _JobsScreenState extends State<JobsScreen> {
   final ScrollController _scrollController = ScrollController();
 
   List<Job> _jobs = [];
-  final Set<int> _savedJobIds = {};   // ✅ FIX
+  final Set<int> _savedJobIds = {};
   bool _isLoading = false;
   bool _hasMore = true;
   int _page = 0;
   final int _limit = 20;
 
+  // Existing filters (rank, location, vessel) – we keep them
   String? _selectedRank;
   String? _selectedLocation;
   String? _selectedVessel;
+
+  // NEW: Controllers for the new text filters
+  final TextEditingController _titleController = TextEditingController();
+  final TextEditingController _vesselController = TextEditingController();
+  final TextEditingController _companyController = TextEditingController();
   final TextEditingController _locationController = TextEditingController();
+  // Debouncer timer
+  Timer? _debounce;
 
   @override
   void initState() {
@@ -40,6 +49,10 @@ class _JobsScreenState extends State<JobsScreen> {
   void dispose() {
     _scrollController.dispose();
     _locationController.dispose();
+    _titleController.dispose();
+    _vesselController.dispose();
+    _companyController.dispose();
+    _debounce?.cancel();
     super.dispose();
   }
 
@@ -50,6 +63,14 @@ class _JobsScreenState extends State<JobsScreen> {
         _fetchJobs(refresh: false);
       }
     }
+  }
+
+  // Called whenever any filter changes (with debounce)
+  void _onFilterChanged(String _) {
+    if (_debounce?.isActive ?? false) _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 500), () {
+      _fetchJobs(refresh: true);
+    });
   }
 
   Future<void> _fetchJobs({bool refresh = true}) async {
@@ -63,8 +84,15 @@ class _JobsScreenState extends State<JobsScreen> {
       final api = context.read<ApiClient>();
       final jobs = await api.getJobs(
         rank: _selectedRank,
-        location: _selectedLocation?.trim().isEmpty == true ? null : _selectedLocation?.trim(),
-        vesselType: _selectedVessel,
+        location: _selectedLocation?.trim().isEmpty == true
+            ? null
+            : _selectedLocation?.trim(),
+        // NEW: pass the filter values
+        vesselType: _vesselController.text.isNotEmpty
+            ? _vesselController.text
+            : null,
+        title: _titleController.text.isNotEmpty ? _titleController.text : null,
+        company: _companyController.text.isNotEmpty ? _companyController.text : null,
         limit: _limit,
         offset: _page * _limit,
       );
@@ -120,7 +148,9 @@ class _JobsScreenState extends State<JobsScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
       }
     }
   }
@@ -133,7 +163,6 @@ class _JobsScreenState extends State<JobsScreen> {
       );
       return;
     }
-
     await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
@@ -143,29 +172,96 @@ class _JobsScreenState extends State<JobsScreen> {
       return const Center(child: CircularProgressIndicator());
     }
 
-    return SmartRefresher(
-      controller: _refreshController,
-      onRefresh: () => _fetchJobs(refresh: true),
-      child: ListView.builder(
-        controller: _scrollController,
-        itemCount: _jobs.length,
-        itemBuilder: (_, i) {
-          final job = _jobs[i];
-          final isSaved = _savedJobIds.contains(job.id);
-
-          return Card(
-            child: ListTile(
-              title: Text(job.title),
-              subtitle: Text('${job.company ?? 'Unknown'} • ${job.location ?? 'Unknown'}'),
-              trailing: IconButton(
-                icon: Icon(isSaved ? Icons.bookmark : Icons.bookmark_border),
-                onPressed: () => _toggleSaveJob(job),
+    // Wrap everything in a Column to place filters above the list
+    return Column(
+      children: [
+        // NEW: Filter row
+        Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _titleController,
+                  decoration: const InputDecoration(
+                    labelText: 'Title',
+                    border: OutlineInputBorder(),
+                  ),
+                  onChanged: _onFilterChanged,
+                ),
               ),
-              onTap: () => _openJobUrl(job.url),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextField(
+                  controller: _vesselController,
+                  decoration: const InputDecoration(
+                    labelText: 'Vessel type',
+                    border: OutlineInputBorder(),
+                  ),
+                  onChanged: _onFilterChanged,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextField(
+                  controller: _companyController,
+                  decoration: const InputDecoration(
+                    labelText: 'Company',
+                    border: OutlineInputBorder(),
+                  ),
+                  onChanged: _onFilterChanged,
+                ),
+              ),
+            ],
+          ),
+        ),
+        // The job list (expanded to take remaining space)
+        Expanded(
+          child: SmartRefresher(
+            controller: _refreshController,
+            onRefresh: () => _fetchJobs(refresh: true),
+            child: ListView.builder(
+              controller: _scrollController,
+              itemCount: _jobs.length,
+              itemBuilder: (_, i) {
+                final job = _jobs[i];
+                final isSaved = _savedJobIds.contains(job.id);
+
+                return Card(
+                  child: ListTile(
+                    // NEW: Show "NEW" badge if job.isNew is true
+                    leading: job.isNew
+                        ? Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.green,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: const Text(
+                              'NEW',
+                              style: TextStyle(
+                                  color: Colors.white, fontSize: 10),
+                            ),
+                          )
+                        : null,
+                    title: Text(job.title),
+                    subtitle: Text(
+                        '${job.company ?? 'Unknown'} • ${job.location ?? 'Unknown'}'),
+                    trailing: IconButton(
+                      icon: Icon(isSaved
+                          ? Icons.bookmark
+                          : Icons.bookmark_border),
+                      onPressed: () => _toggleSaveJob(job),
+                    ),
+                    onTap: () => _openJobUrl(job.url),
+                  ),
+                );
+              },
             ),
-          );
-        },
-      ),
+          ),
+        ),
+      ],
     );
   }
 }
